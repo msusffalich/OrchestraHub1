@@ -53,6 +53,36 @@ const ARCHS: Record<string, VoiceArch> = {
 
 const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
+/* ---------- respuesta al impulso generada (reverb por convolución) ---------- */
+function makeImpulse(ctx: BaseAudioContext, seconds = 2.2, decay = 2.8): AudioBuffer {
+  const sr = ctx.sampleRate;
+  const len = Math.floor(sr * seconds);
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t01 = i / len;
+      /* cola exponencial + unas pocas reflexiones tempranas */
+      let v = (Math.random() * 2 - 1) * Math.pow(1 - t01, decay);
+      if (i < sr * 0.05 && Math.random() < 0.001) v += (Math.random() * 2 - 1) * 0.7;
+      d[i] = v * (ch === 0 ? 1 : 0.96);
+    }
+  }
+  return buf;
+}
+
+/* curva de saturación suave (calidez de válvula) */
+function makeSatCurve(k = 2.4): Float32Array<ArrayBuffer> {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(k * x) / norm;
+  }
+  return curve;
+}
+
 let noiseBuf: AudioBuffer | null = null;
 function getNoise(ctx: BaseAudioContext): AudioBuffer {
   if (!noiseBuf || noiseBuf.sampleRate !== ctx.sampleRate) {
@@ -126,19 +156,32 @@ function playMelodic(ctx: BaseAudioContext, dest: AudioNode, archKey: string,
   lp.frequency.value = Math.min(arch.lpMax, freq * arch.lpMul) * (1.25 - dark * 0.75);
   lp.Q.value = 0.6;
 
+  /* ataque humanizado: ninguna nota arranca exactamente igual */
+  const atk = arch.a * (0.7 + Math.random() * 0.7);
+
   const env = ctx.createGain();
   env.gain.setValueAtTime(0.0001, t);
-  env.gain.linearRampToValueAtTime(vel, t + arch.a);
-  env.gain.setTargetAtTime(vel * arch.s, t + arch.a, arch.d / 3);
-  const relAt = t + Math.max(arch.a + 0.03, dur);
+  env.gain.linearRampToValueAtTime(vel, t + atk);
+  env.gain.setTargetAtTime(vel * arch.s, t + atk, arch.d / 3);
+  const relAt = t + Math.max(atk + 0.03, dur);
   env.gain.setTargetAtTime(0.0001, relAt, arch.r / 3);
 
   lp.connect(env).connect(dest);
+
+  /* deriva lenta de afinación (±5 cents): mantiene "vivo" el sostenido */
+  const drift = ctx.createOscillator();
+  drift.frequency.value = 0.22 + Math.random() * 0.3;
+  const driftGain = ctx.createGain();
+  driftGain.gain.value = 4.5;
+  drift.connect(driftGain);
+  drift.start(t);
+  drift.stop(relAt + arch.r + 0.2);
 
   for (const [type, mult, gain] of arch.layers) {
     const osc = ctx.createOscillator();
     osc.type = type;
     osc.frequency.value = freq * mult;
+    osc.detune.value = (Math.random() - 0.5) * 7;
     const og = ctx.createGain();
     og.gain.value = gain;
     if (arch.vib) {
@@ -150,9 +193,34 @@ function playMelodic(ctx: BaseAudioContext, dest: AudioNode, archKey: string,
       lfo.start(t);
       lfo.stop(relAt + arch.r + 0.2);
     }
+    driftGain.connect(osc.detune);
     osc.connect(og).connect(lp);
     osc.start(t);
     osc.stop(relAt + arch.r + 0.2);
+  }
+
+  /* aire / respiración: capa de ruido filtrado que sigue la envolvente.
+     Es lo que más acerca vientos, cuerdas y voces al timbre real. */
+  const BREATH: Record<string, number> = {
+    flute: 0.16, panpipes: 0.14, andeanflute: 0.14, woodwind: 0.08, brass: 0.055,
+    voice: 0.07, bagpipe: 0.05, strings: 0.022, pad: 0.018, harmonium: 0.03,
+  };
+  const breath = BREATH[archKey] ?? 0;
+  if (breath > 0) {
+    const nsrc = ctx.createBufferSource();
+    nsrc.buffer = getNoise(ctx);
+    const nf = ctx.createBiquadFilter();
+    nf.type = "bandpass";
+    nf.frequency.value = Math.min(9500, freq * 3.6);
+    nf.Q.value = 0.7;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.linearRampToValueAtTime(vel * breath, t + atk);
+    ng.gain.setTargetAtTime(vel * breath * arch.s, t + atk, arch.d / 3);
+    ng.gain.setTargetAtTime(0.0001, relAt, arch.r / 3);
+    nsrc.connect(nf).connect(ng).connect(lp);
+    nsrc.start(t);
+    nsrc.stop(relAt + arch.r + 0.2);
   }
 }
 
@@ -167,10 +235,12 @@ function playDrum(ctx: BaseAudioContext, dest: AudioNode, kind: string, midi: nu
     case "kick":
       toneHit(ctx, dest, t, v, 150, 42, 0.3);
       noiseHit(ctx, dest, t, v * 0.3, 0.03, "lowpass", 400);
+      noiseHit(ctx, dest, t, v * 0.45, 0.012, "highpass", 3200); /* click del mazo */
       break;
     case "snare":
       noiseHit(ctx, dest, t, v * 0.8, 0.16, "bandpass", 1800, 1.2);
       toneHit(ctx, dest, t, v * 0.4, 240, 140, 0.09, "triangle");
+      noiseHit(ctx, dest, t, v * 0.22, 0.42, "bandpass", 950, 0.8); /* cola de sala */
       break;
     case "clap":
       noiseHit(ctx, dest, t, v * 0.7, 0.12, "bandpass", 1400, 2);
@@ -323,6 +393,9 @@ class AudioEngine {
   private master: GainNode | null = null;
   private comp: DynamicsCompressorNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
+  private sat: WaveShaperNode | null = null;
+  private reverbSend: GainNode | null = null;
+  private convolver: ConvolverNode | null = null;
   private strips = new Map<string, ChannelStrip>();
   private session: Session | null = null;
   private timer: number | null = null;
@@ -348,10 +421,30 @@ class AudioEngine {
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 2048;
     this.masterAnalyser.smoothingTimeConstant = 0.82;
-    this.master.connect(this.comp).connect(this.masterAnalyser).connect(this.ctx.destination);
+    /* saturación suave (calidez) + bus de reverb por convolución */
+    this.sat = this.ctx.createWaveShaper();
+    this.sat.curve = makeSatCurve(2.4);
+    this.sat.oversample = "2x";
+    this.reverbSend = this.ctx.createGain();
+    this.reverbSend.gain.value = 0.32;
+    this.convolver = this.ctx.createConvolver();
+    this.convolver.buffer = makeImpulse(this.ctx, 2.3, 2.8);
+    this.master.connect(this.sat);
+    this.master.connect(this.reverbSend);
+    this.reverbSend.connect(this.convolver);
+    this.convolver.connect(this.sat);
+    this.sat.connect(this.comp).connect(this.masterAnalyser).connect(this.ctx.destination);
   }
 
   getAnalyser(): AnalyserNode | null { return this.masterAnalyser; }
+
+  /* el parámetro «Espacio» del estilo controla la mezcla de reverb */
+  setSpace(space: number) {
+    if (this.ctx && this.reverbSend) {
+      const wet = 0.1 + Math.max(0, Math.min(1, space)) * 0.62;
+      this.reverbSend.gain.setTargetAtTime(wet, this.ctx.currentTime, 0.08);
+    }
+  }
 
   setMasterVolume(v: number) {
     this.masterVolume = v;
@@ -426,6 +519,7 @@ class AudioEngine {
     };
     this.scheduledIdx = 0;
     this.syncChannels(channels);
+    this.setSpace(comp.space);
     this.timer = window.setInterval(() => this.tick(), 40);
     this.emit();
   }
@@ -563,7 +657,19 @@ export async function renderCompositionToWav(
   compN.threshold.value = -14;
   compN.knee.value = 22;
   compN.ratio.value = 3.2;
-  master.connect(compN).connect(ctx.destination);
+  /* misma cadena que en vivo: saturación + reverb por convolución según el espacio */
+  const sat = ctx.createWaveShaper();
+  sat.curve = makeSatCurve(2.4);
+  sat.oversample = "2x";
+  const send = ctx.createGain();
+  send.gain.value = 0.1 + Math.max(0, Math.min(1, comp.space)) * 0.62;
+  const conv = ctx.createConvolver();
+  conv.buffer = makeImpulse(ctx, 2.3, 2.8);
+  master.connect(sat);
+  master.connect(send);
+  send.connect(conv);
+  conv.connect(sat);
+  sat.connect(compN).connect(ctx.destination);
 
   const strips = new Map<string, { input: GainNode; dark: number }>();
   const anySolo = Object.values(channels).some((c) => c.solo);
