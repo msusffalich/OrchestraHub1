@@ -89,6 +89,7 @@ export interface Composition {
   lyricMap?: LyricLine[];      // líneas sincronizadas con la música
   transpose?: number;          // semitonos aplicados (ajuste post-generación)
   leadId?: string;             // instrumento líder forzado (ajuste post-generación)
+  singerId?: string;           // canal que canta la letra
 }
 
 export interface PromptAnalysis {

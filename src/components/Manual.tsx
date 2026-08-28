@@ -65,6 +65,7 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
       title: "Estudio de Mezcla",
       body: [
         "El estudio es donde la orquesta se instala y suena. Tiene tres zonas: el motor prompt-a-música, el transporte con el escenario en vivo, y la consola multicanal.",
+        "El campo «Título de la obra» está arriba del todo, separado del prompt. Si lo dejas vacío, el motor propone un título al generar; puedes escribir el tuyo y será el que se guarde y aparezca en «Sonando ahora».",
         "Motor prompt-a-música: escribe la obra en lenguaje natural («Jazz nocturno melancólico y lluvioso con saxofón líder»). El motor extrae carácter, modo, compás, tempo, líder y efectos de ambiente, y compone una pieza completa respetando los parámetros técnicos del estilo elegido.",
         "Parámetros del estilo: antes de generar puedes ajustar Tempo (limitado al rango técnico del estilo o de la fusión), Energía, Swing/Groove, Espacio y acústica, y Brillo de producción. El espacio y el brillo modifican la reverberación percibida y el filtrado del máster.",
         "Consola: cada instrumento tiene fader de ganancia con vúmetro LED, knob de paneo L/R, botones Mute/Solo y lectura en dB. El knob de BPM cambia el tempo en vivo sin saltos (ancla de tempo) y el knob Master controla la salida general.",

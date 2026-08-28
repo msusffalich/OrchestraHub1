@@ -77,6 +77,8 @@ export function StudioSection() {
 
   /* ---------- generador prompt-a-música ---------- */
   const [prompt, setPrompt] = useState("");
+  const [pieceTitle, setPieceTitle] = useState("");  // título de la obra (≠ prompt)
+  const titleTouched = useRef(false);               // el usuario ya escribió su título
   const [lyrics, setLyrics] = useState("");         // letra opcional (música + letra)
   const [showLyrics, setShowLyrics] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -117,6 +119,8 @@ export function StudioSection() {
     let comp = compose(a, orch, seed, lang, params ?? undefined, lyrics.trim() || undefined);
     comp = transposeComposition(comp, tr);
     comp = { ...comp, leadId: lead !== "auto" ? lead : undefined };
+    /* autocompleta el título de la obra solo si el usuario no escribió uno */
+    if (!titleTouched.current) setPieceTitle(comp.title);
     setSession(comp, p);
     engine.play(comp, Object.keys(mix).length ? mix : orch.channels, "studio-session", "session");
   };
@@ -251,6 +255,24 @@ export function StudioSection() {
               <span className="text-led-400"><Icon name="spark" size={18} /></span>
               {t("stu.generator")}
             </h2>
+
+            {/* Título de la obra: independiente del prompt. Se autocompleta al generar, pero puedes escribir el tuyo. */}
+            <label className="block">
+              <span className="silk-label-xs flex items-center gap-1.5 mb-1.5">
+                <Icon name="works" size={12} /> {t("stu.workTitleLabel")}
+              </span>
+              <input
+                type="text"
+                value={pieceTitle}
+                onChange={(e) => { setPieceTitle(e.target.value); titleTouched.current = true; }}
+                placeholder={t("stu.workTitleAutoPh")}
+                className="w-full bg-ink-900 border border-tube-500/40 rounded-lg px-3.5 py-2.5 text-[14px] font-semibold text-tube-300 placeholder-ink-500 focus:border-tube-500/80 transition-colors focus-ring"
+              />
+            </label>
+
+            <span className="silk-label-xs flex items-center gap-1.5 mt-3 mb-1.5">
+              <Icon name="mic" size={12} /> {t("stu.promptLabel")}
+            </span>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -281,13 +303,19 @@ export function StudioSection() {
               {lyrics.trim() && <Chip color="#ff9ecb">{parseLyrics(lyrics).length} {t("stu.lyricLines")}</Chip>}
             </button>
             {showLyrics && (
-              <textarea
-                value={lyrics}
-                onChange={(e) => setLyrics(e.target.value)}
-                placeholder={t("stu.lyricsPh")}
-                rows={5}
-                className="mt-2 w-full bg-ink-900 border border-ink-600 rounded-lg px-3.5 py-3 text-[13.5px] leading-relaxed text-ink-100 placeholder-ink-500 resize-y focus:border-clip-400/60 transition-colors focus-ring"
-              />
+              <>
+                <textarea
+                  value={lyrics}
+                  onChange={(e) => setLyrics(e.target.value)}
+                  placeholder={t("stu.lyricsPh")}
+                  rows={5}
+                  className="mt-2 w-full bg-ink-900 border border-ink-600 rounded-lg px-3.5 py-3 text-[13.5px] leading-relaxed text-ink-100 placeholder-ink-500 resize-y focus:border-clip-400/60 transition-colors focus-ring"
+                />
+                <p className="text-ink-400 text-[11px] leading-relaxed mt-1.5 flex gap-1.5">
+                  <span className="text-clip-400 mt-0.5 shrink-0"><Icon name="mic" size={12} /></span>
+                  {t("stu.lyricsHint")}
+                </p>
+              </>
             )}
 
             <StyleParamsPanel orch={orch} params={params} setParams={setParams} lang={lang} />
@@ -358,7 +386,7 @@ export function StudioSection() {
 
             {sessionComp ? (
               <>
-                <p className="text-ink-100 font-semibold text-[15px] truncate">{sessionComp.title}</p>
+                <p className="text-ink-100 font-semibold text-[15px] truncate">{pieceTitle.trim() || sessionComp.title}</p>
                 <p className="text-ink-400 text-xs mb-3">{orch.name} · {sessionComp.bars} {t("stu.bars")} · {Math.round(sessionComp.durationSec)}s</p>
                 <div className="h-2 rounded-full bg-ink-900 border border-black/50 overflow-hidden mb-1.5">
                   <div className="h-full rounded-full transition-[width] duration-150"
@@ -385,7 +413,7 @@ export function StudioSection() {
               </div>
             </div>
             {sessionComp && (
-              <button onClick={() => { setWorkTitle(sessionComp.title); setSaveOpen(true); }} className="btn-ghost rounded-lg px-4 py-2 text-[13px] font-semibold w-full mt-4 flex items-center justify-center gap-2">
+              <button onClick={() => { setWorkTitle(pieceTitle.trim() || sessionComp.title); setSaveOpen(true); }} className="btn-ghost rounded-lg px-4 py-2 text-[13px] font-semibold w-full mt-4 flex items-center justify-center gap-2">
                 <Icon name="works" size={15} /> {t("stu.saveWork")}
               </button>
             )}
@@ -463,7 +491,14 @@ export function StudioSection() {
                   <span className="text-clip-400"><Icon name="mic" size={17} /></span>
                   {t("stu.karaoke")}
                 </h2>
-                <Led on={snap.status === "playing" && isSessionSource} color="red" pulse />
+                <div className="flex items-center gap-2">
+                  {sessionComp.singerId && (
+                    <Chip color={INSTRUMENT_MAP[sessionComp.singerId]?.color ?? "#ff9ecb"}>
+                      {t("stu.sings")}: {instrumentName(sessionComp.singerId, lang)}
+                    </Chip>
+                  )}
+                  <Led on={snap.status === "playing" && isSessionSource} color="red" pulse />
+                </div>
               </div>
               <div className="panel-inset rounded-lg p-3.5 max-h-[180px] overflow-y-auto">
                 {sessionComp.lyricMap.map((l, i) => {

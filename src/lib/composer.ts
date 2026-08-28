@@ -634,15 +634,18 @@ export function compose(
   /* --- línea vocal guiada por la letra (música + letra) --- */
   const lyricMap: LyricLine[] = [];
   const lyricLines = lyrics ? parseLyrics(lyrics) : [];
+  let singerId: string | undefined;
   if (lyricLines.length) {
     const bodyStart = introBars * meter;
     const bodyEnd = (bars - outroBars) * meter;
     const totalBody = Math.max(1, bodyEnd - bodyStart);
     const weights = lyricLines.map((l) => countSyllables(l));
     const totalW = weights.reduce((a, b) => a + b, 0);
-    // voces disponibles para cantar (prioriza las de la orquesta)
-    const singers = voiceIds.length ? voiceIds : (["soprano", "tenor"].filter((v) => has(v)));
-    const singer = singers[0] ?? leadA;
+    /* Cantante garantizado: primero una voz de la orquesta; si no hay,
+       el instrumento líder; como último recurso, el primer melódico. */
+    const firstMelodic = ids.find((id) => INSTRUMENT_MAP[id]?.roles.includes("melody"));
+    const singer = voiceIds[0] ?? leadA ?? firstMelodic;
+    singerId = singer;
 
     let cursor = bodyStart;
     lyricLines.forEach((line, li) => {
@@ -666,7 +669,7 @@ export function compose(
           deg = clamp(deg, 5, 16);
           const midi = clampToRange(scaleNote(rootMidi + 12, scale, deg), def.range);
           const dur = ((endBeat - startBeat) / n) * 0.92;
-          events.push(EV(swung, singer, midi, dur, (0.55 + rng() * 0.18) * (first || last ? 1 : 0.85)));
+          events.push(EV(swung, singer, midi, dur, (0.7 + rng() * 0.2) * (first || last ? 1 : 0.88)));
         }
       }
       cursor = endBeat + 0.5;
@@ -694,6 +697,7 @@ export function compose(
     bright,
     lyrics: lyrics?.trim() || undefined,
     lyricMap: lyricMap.length ? lyricMap : undefined,
+    singerId,
   };
 }
 
