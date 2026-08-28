@@ -79,6 +79,7 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
       body: [
         "Cada obra guardada persiste con: título, prompt original, letra (si la añadiste), ajustes de tonalidad y líder, portada generativa única (determinista por semilla), mezcla completa y los metadatos de la orquesta que la interpretó (incluidas sus fusiones).",
         "Como la obra es una semilla + mezcla, ocupa bytes y suena idéntica en cualquier dispositivo. Puedes reabrir su mezcla en el estudio, tocarla en la sala de conciertos o exportarla a WAV de 44.1 kHz (render offline, sin pérdida).",
+        "Partitura PDF: pulsa el icono de nota en cualquier obra para abrir el generador de partituras. Elige el título y si quieres incluir la letra; el ecosistema transcribe la línea melódica principal en clave de Sol (pentagrama, compases, alteraciones y valores rítmicos) y, si la obra se canta, alinea cada sílaba bajo su nota. Descarga el PDF listo para imprimir. También puedes generar la partitura de la sesión actual desde el Estudio.",
       ],
     },
     concert: {
@@ -168,6 +169,7 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
       body: [
         "Each saved work persists with: title, original prompt, lyrics (if you added them), key and lead adjustments, unique generative cover (deterministic by seed), full mix and the performing ensemble's metadata (including fusions).",
         "Because a work is a seed + mix, it takes bytes and sounds identical on any device. You can reopen its mix in the studio, perform it in the concert hall, or export it to 44.1 kHz WAV (offline render, lossless).",
+        "PDF score: press the note icon on any work to open the score generator. Choose the title and whether to include lyrics; the ecosystem transcribes the main melodic line in treble clef (staff, bars, accidentals and note values) and, if the work is sung, aligns each syllable under its note. Download the print-ready PDF. You can also score the current session from the Studio.",
       ],
     },
     concert: {

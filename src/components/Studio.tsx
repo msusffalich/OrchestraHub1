@@ -8,6 +8,7 @@ import { engine, type EngineSnapshot } from "../lib/engine";
 import { hashString, uid } from "../lib/core";
 import { useSonic, useT } from "../lib/store";
 import { StageView, SectionHeader, EmptyState, Chip } from "./visuals";
+import { ScoreModal } from "./ScoreModal";
 import { Icon } from "./icons";
 import { Knob, Fader, MSButton, Led, TransportButton, HSlider } from "./controls";
 
@@ -177,6 +178,7 @@ export function StudioSection() {
   /* ---------- guardar obra ---------- */
   const [saveOpen, setSaveOpen] = useState(false);
   const [workTitle, setWorkTitle] = useState("");
+  const [scoreOpen, setScoreOpen] = useState(false);
   const saveWork = () => {
     if (!sessionComp || !orch) return;
     const track: Track = {
@@ -413,9 +415,14 @@ export function StudioSection() {
               </div>
             </div>
             {sessionComp && (
-              <button onClick={() => { setWorkTitle(pieceTitle.trim() || sessionComp.title); setSaveOpen(true); }} className="btn-ghost rounded-lg px-4 py-2 text-[13px] font-semibold w-full mt-4 flex items-center justify-center gap-2">
-                <Icon name="works" size={15} /> {t("stu.saveWork")}
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => { setWorkTitle(pieceTitle.trim() || sessionComp.title); setSaveOpen(true); }} className="btn-ghost rounded-lg px-3 py-2 text-[13px] font-semibold flex-1 flex items-center justify-center gap-2">
+                  <Icon name="works" size={15} /> {t("stu.saveWork")}
+                </button>
+                <button onClick={() => setScoreOpen(true)} title={t("lib.score")} className="btn-ghost rounded-lg px-3 py-2 text-[13px] font-semibold flex items-center justify-center gap-2">
+                  <Icon name="note" size={15} /> {t("stu.score")}
+                </button>
+              </div>
             )}
           </motion.section>
 
@@ -558,6 +565,33 @@ export function StudioSection() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* modal partitura (sesión actual) */}
+      {scoreOpen && sessionComp && orch && (
+        <ScoreModal
+          track={{
+            id: "session",
+            title: pieceTitle.trim() || sessionComp.title,
+            prompt: useSonic.getState().sessionPrompt || prompt,
+            orchestraId: orch.id,
+            orchestraName: orch.name,
+            genreId: orch.genreId,
+            seed: sessionComp.seed,
+            bpm: sessionComp.bpm,
+            meter: sessionComp.meter,
+            bars: sessionComp.bars,
+            createdAt: Date.now(),
+            coverSeed: sessionComp.seed % 99991,
+            mix,
+            lyrics: sessionComp.lyrics,
+            transpose: sessionComp.transpose,
+            leadId: sessionComp.leadId,
+          }}
+          comp={sessionComp}
+          onClose={() => setScoreOpen(false)}
+          onDone={() => { setScoreOpen(false); toast(t("score.done")); }}
+        />
+      )}
     </div>
   );
 }

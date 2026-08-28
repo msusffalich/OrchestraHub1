@@ -3,9 +3,11 @@ import { motion } from "framer-motion";
 import type { Track, Lang } from "../lib/core";
 import { GENRE_MAP, genreName } from "../lib/genres";
 import { analyzePrompt } from "../lib/composer";
+import type { Composition } from "../lib/core";
 import { engine, renderCompositionToWav, downloadBlob } from "../lib/engine";
 import { useSonic, useT, recomposeTrack } from "../lib/store";
 import { CoverArt, SectionHeader, EmptyState, ConfirmModal, Chip } from "./visuals";
+import { ScoreModal } from "./ScoreModal";
 import { Icon } from "./icons";
 
 const fmtDur = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -25,6 +27,12 @@ export function LibrarySection() {
 
   const [toDelete, setToDelete] = useState<Track | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [scoreFor, setScoreFor] = useState<{ track: Track; comp: Composition } | null>(null);
+
+  const openScore = (tr: Track) => {
+    const comp = recomposeTrack(tr, orchestras.find((o) => o.id === tr.orchestraId), lang);
+    setScoreFor({ track: tr, comp });
+  };
 
   const exportWav = async (tr: Track) => {
     setExportingId(tr.id);
@@ -78,6 +86,7 @@ export function LibrarySection() {
               onExport={() => void exportWav(tr)}
               onConcert={() => playInConcert(tr)}
               onMix={() => openMix(tr)}
+              onScore={() => openScore(tr)}
               onDelete={() => setToDelete(tr)}
             />
           ))}
@@ -93,14 +102,24 @@ export function LibrarySection() {
         onConfirm={() => { if (toDelete) { deleteTrack(toDelete.id); toast(t("lib.deletedToast")); } setToDelete(null); }}
         onCancel={() => setToDelete(null)}
       />
+
+      {scoreFor && (
+        <ScoreModal
+          track={scoreFor.track}
+          comp={scoreFor.comp}
+          onClose={() => setScoreFor(null)}
+          onDone={() => { setScoreFor(null); toast(t("score.done")); }}
+        />
+      )}
     </div>
   );
 }
 
-function TrackCard({ tr, index, lang, hasOrchestra, exporting, onExport, onConcert, onMix, onDelete }: {
+function TrackCard({ tr, index, lang, hasOrchestra, exporting, onExport, onConcert, onMix, onScore, onDelete }: {
   tr: Track; index: number; lang: Lang; hasOrchestra: boolean; exporting: boolean;
-  onExport: () => void; onConcert: () => void; onMix: () => void; onDelete: () => void;
+  onExport: () => void; onConcert: () => void; onMix: () => void; onScore: () => void; onDelete: () => void;
 }) {
+  const hasLyrics = !!tr.lyrics && tr.lyrics.trim().length > 0;
   const t = useT();
   const genre = GENRE_MAP[tr.genreId];
   const moodKey = useMemo(() => {
@@ -129,6 +148,7 @@ function TrackCard({ tr, index, lang, hasOrchestra, exporting, onExport, onConce
         <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap max-w-[75%]">
           <Chip color={genre?.palette[0] ?? "#ffb03a"}>{genreName(tr.genreId, lang)}</Chip>
           {(tr.fusions ?? []).map((f) => <Chip key={f} color={GENRE_MAP[f]?.palette[1] ?? "#45e0cd"}>+ {genreName(f, lang)}</Chip>)}
+          {hasLyrics && <Chip color="#ff9ecb">{t("lib.withLyrics")}</Chip>}
         </div>
         <button
           onClick={onConcert}
@@ -146,8 +166,16 @@ function TrackCard({ tr, index, lang, hasOrchestra, exporting, onExport, onConce
         <h3 className="font-display font-bold text-[17px] leading-snug">{tr.title}</h3>
         <p className="text-ink-400 text-xs mt-0.5">{t("lib.by")} <span className="text-ink-200 font-semibold">{tr.orchestraName}</span> · {date}</p>
         <p className="text-ink-400 text-[11.5px] italic mt-2 line-clamp-2 leading-relaxed border-l-2 border-ink-600 pl-2.5">“{tr.prompt}”</p>
+        {hasLyrics && (
+          <p className="text-ink-300 text-[11.5px] mt-2 line-clamp-2 leading-relaxed border-l-2 border-clip-400/60 pl-2.5">
+            <span className="text-clip-400 mr-1"><Icon name="mic" size={11} className="inline -mt-0.5" /></span>
+            {tr.lyrics!.trim().split("\n").slice(0, 2).join(" · ")}
+          </p>
+        )}
 
         <div className="flex items-center gap-1.5 mt-3.5">
+          <button onClick={onScore} title={t("lib.score")}
+            className="btn-ghost rounded-lg p-2"><Icon name="note" size={15} /></button>
           <button onClick={onMix} disabled={!hasOrchestra} title={hasOrchestra ? t("lib.openMix") : "—"}
             className="btn-ghost rounded-lg p-2 disabled:opacity-30 disabled:pointer-events-none"><Icon name="faders" size={15} /></button>
           <button onClick={onExport} disabled={exporting} title={t("common.download")}
