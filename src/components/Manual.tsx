@@ -69,12 +69,14 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
         "Parámetros del estilo: antes de generar puedes ajustar Tempo (limitado al rango técnico del estilo o de la fusión), Energía, Swing/Groove, Espacio y acústica, y Brillo de producción. El espacio y el brillo modifican la reverberación percibida y el filtrado del máster.",
         "Consola: cada instrumento tiene fader de ganancia con vúmetro LED, knob de paneo L/R, botones Mute/Solo y lectura en dB. El knob de BPM cambia el tempo en vivo sin saltos (ancla de tempo) y el knob Master controla la salida general.",
         "Todo cambio de mezcla se aplica al instante y se guarda como mezcla por defecto de la orquesta.",
+        "Letra opcional: despliega «Añadir letra» y escribe tu texto (una línea por frase). Al generar, la canción sale completa —música + letra—: la línea vocal de la orquesta canta la letra siguiendo sus sílabas. Mientras suena, el panel «Letra sincronizada» resalta cada frase al compás, como un karaoke.",
+        "Ajustes de la obra: una vez generada la pieza, el panel «Ajustes de la obra» deja modificarla a tu gusto y la reinterpreta al instante: Tonalidad (transposición de −6 a +6 semitonos, sin afectar a la percusión), Instrumento líder (reasigna la melodía a cualquier instrumento melódico de la orquesta), Variación (nueva semilla) y Restablecer. La letra y los ajustes se guardan con la obra.",
       ],
     },
     library: {
       title: "Biblioteca de Obras",
       body: [
-        "Cada obra guardada persiste con: título, prompt original, portada generativa única (determinista por semilla), mezcla completa y los metadatos de la orquesta que la interpretó (incluidas sus fusiones).",
+        "Cada obra guardada persiste con: título, prompt original, letra (si la añadiste), ajustes de tonalidad y líder, portada generativa única (determinista por semilla), mezcla completa y los metadatos de la orquesta que la interpretó (incluidas sus fusiones).",
         "Como la obra es una semilla + mezcla, ocupa bytes y suena idéntica en cualquier dispositivo. Puedes reabrir su mezcla en el estudio, tocarla en la sala de conciertos o exportarla a WAV de 44.1 kHz (render offline, sin pérdida).",
       ],
     },
@@ -82,6 +84,7 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
       title: "Sala de Conciertos",
       body: [
         "Programa la velada eligiendo obras de tu biblioteca. La sala interpreta la obra con el mismo motor de audio y dibuja en tiempo real: un analizador de espectro de 72 bandas alimentado por el AnalyserNode real, haces de luz que siguen los medios, un anillo que pulsa con los graves, público que salta con el bombo y polvo de agudos.",
+        "Si la obra tiene letra, la sala la muestra sincronizada sobre el escenario, resaltando la frase que se canta en cada momento.",
         "Al terminar la obra, la sala agradece con un «¡Bravo!». El transporte permite pausar, reanudar y detener la interpretación.",
       ],
     },
@@ -155,12 +158,14 @@ const CONTENT: Record<Lang, Record<string, { title: string; body: string[]; step
         "Style parameters: before generating you can tune Tempo (clamped to the technical range of the style or fusion), Energy, Swing/Groove, Space & acoustics, and Production brightness. Space and brightness shape perceived reverb and master filtering.",
         "Console: every instrument has a gain fader with LED meter, L/R pan knob, Mute/Solo buttons and a dB readout. The BPM knob retimes live without glitches (tempo anchor) and the Master knob drives the overall output.",
         "Every mix change applies instantly and is saved as the ensemble's default mix.",
+        "Optional lyrics: expand “Add lyrics” and type your text (one line per phrase). On generation the song comes out complete —music + lyrics—: the ensemble's vocal line sings your lyrics following their syllables. While it plays, the “Synced lyrics” panel highlights each phrase in time, karaoke-style.",
+        "Piece adjustments: once a piece is generated, the “Piece adjustments” panel lets you reshape it to taste, re-performed instantly: Key (transpose −6 to +6 semitones, drums untouched), Lead instrument (reassign the melody to any melodic instrument in the ensemble), Variation (new seed) and Reset. Lyrics and adjustments are saved with the work.",
       ],
     },
     library: {
       title: "Works Library",
       body: [
-        "Each saved work persists with: title, original prompt, unique generative cover (deterministic by seed), full mix and the performing ensemble's metadata (including fusions).",
+        "Each saved work persists with: title, original prompt, lyrics (if you added them), key and lead adjustments, unique generative cover (deterministic by seed), full mix and the performing ensemble's metadata (including fusions).",
         "Because a work is a seed + mix, it takes bytes and sounds identical on any device. You can reopen its mix in the studio, perform it in the concert hall, or export it to 44.1 kHz WAV (offline render, lossless).",
       ],
     },

@@ -1,5 +1,5 @@
 import type {
-  CompEvent, Composition, GenParams, Orchestra, PromptAnalysis, Lang,
+  CompEvent, Composition, GenParams, Orchestra, PromptAnalysis, Lang, LyricLine,
 } from "./core";
 import { clamp, chance, hashString, irange, mulberry32, pick } from "./core";
 import { INSTRUMENT_MAP } from "./instruments";
@@ -296,9 +296,25 @@ function percPatternEvents(
 
 /* ---------------- 2 · Composición completa ---------------- */
 
+/* estimación de sílabas (grupos vocálicos) para dosificar la línea vocal */
+export function countSyllables(line: string): number {
+  const t = norm(line).replace(/[^a-zñü ]/g, " ");
+  const groups = t.match(/[aeiouy]+/g);
+  return Math.max(2, groups?.length ?? 2);
+}
+
+export function parseLyrics(lyrics: string): string[] {
+  return lyrics
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .slice(0, 48);
+}
+
 export function compose(
   analysis: PromptAnalysis, orch: Orchestra, seed: number, lang: Lang,
   override?: Partial<GenParams>,
+  lyrics?: string,
 ): Composition {
   const genre = GENRE_MAP[orch.genreId] ?? GENRE_MAP.symphonic;
   const rng = mulberry32(seed);
@@ -615,6 +631,48 @@ export function compose(
     void barGenreId;
   }
 
+  /* --- línea vocal guiada por la letra (música + letra) --- */
+  const lyricMap: LyricLine[] = [];
+  const lyricLines = lyrics ? parseLyrics(lyrics) : [];
+  if (lyricLines.length) {
+    const bodyStart = introBars * meter;
+    const bodyEnd = (bars - outroBars) * meter;
+    const totalBody = Math.max(1, bodyEnd - bodyStart);
+    const weights = lyricLines.map((l) => countSyllables(l));
+    const totalW = weights.reduce((a, b) => a + b, 0);
+    // voces disponibles para cantar (prioriza las de la orquesta)
+    const singers = voiceIds.length ? voiceIds : (["soprano", "tenor"].filter((v) => has(v)));
+    const singer = singers[0] ?? leadA;
+
+    let cursor = bodyStart;
+    lyricLines.forEach((line, li) => {
+      const span = Math.max(2, (weights[li] / totalW) * totalBody);
+      const startBeat = cursor;
+      const endBeat = Math.min(bodyEnd, cursor + span);
+      lyricMap.push({ line, startBeat, endBeat, syllables: weights[li] });
+
+      if (singer && INSTRUMENT_MAP[singer]) {
+        const def = INSTRUMENT_MAP[singer];
+        const n = Math.max(2, Math.min(weights[li], Math.round(span * 2)));
+        const chordDeg = prog[Math.floor(startBeat / meter) % prog.length];
+        let deg = 9 + (li % 2 === 0 ? 0 : 2);
+        for (let i = 0; i < n; i++) {
+          const beat = startBeat + (i / n) * (endBeat - startBeat);
+          const swung = Math.round(beat * 2) % 2 === 1 ? beat + swing * 0.5 : beat;
+          const first = i === 0, last = i === n - 1;
+          if (first) deg = chordDeg + 7;              // arranca en la tónica alta
+          else if (last) deg = chordDeg + 4;          // cadencia en la quinta
+          else deg += pick(rng, [-1, 1, 0, -1, 1, 2, -2]);
+          deg = clamp(deg, 5, 16);
+          const midi = clampToRange(scaleNote(rootMidi + 12, scale, deg), def.range);
+          const dur = ((endBeat - startBeat) / n) * 0.92;
+          events.push(EV(swung, singer, midi, dur, (0.55 + rng() * 0.18) * (first || last ? 1 : 0.85)));
+        }
+      }
+      cursor = endBeat + 0.5;
+    });
+  }
+
   events.sort((a, b) => a.beat - b.beat);
   const totalBeats = bars * meter;
 
@@ -634,7 +692,30 @@ export function compose(
     fusionIds,
     space,
     bright,
+    lyrics: lyrics?.trim() || undefined,
+    lyricMap: lyricMap.length ? lyricMap : undefined,
   };
+}
+
+/* ============================================================
+   AJUSTE POST-GENERACIÓN · Transposición de tonalidad.
+   Desplaza las notas de canales afinados (no la percusión).
+   ============================================================ */
+export function transposeComposition(comp: Composition, semitones: number): Composition {
+  if (!semitones) return comp;
+  const events = comp.events.map((e) => {
+    const def = INSTRUMENT_MAP[e.ch];
+    const isPerc = !def || !!def.drum || def.family === "drums" || def.family === "percussion";
+    if (isPerc) return e;
+    let m = e.midi + semitones;
+    if (def) {
+      while (m < def.range[0]) m += 12;
+      while (m > def.range[1]) m -= 12;
+      m = clamp(m, def.range[0], def.range[1]);
+    }
+    return { ...e, midi: m };
+  });
+  return { ...comp, events, transpose: semitones };
 }
 
 /* ---------------- títulos generados ---------------- */

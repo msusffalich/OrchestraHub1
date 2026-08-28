@@ -62,6 +62,13 @@ export interface CompEvent {
   vel: number;
 }
 
+export interface LyricLine {
+  line: string;       // texto de la línea
+  startBeat: number;  // inicio en beats (para karaoke)
+  endBeat: number;    // fin en beats
+  syllables: number;  // sílabas detectadas (densidad de notas)
+}
+
 export interface Composition {
   seed: number;
   events: CompEvent[];
@@ -78,6 +85,10 @@ export interface Composition {
   fusionIds: string[];
   space: number;    // 0 íntimo · 1 sala grande
   bright: number;   // 0 cálido · 1 brillante
+  lyrics?: string;             // letra original del usuario
+  lyricMap?: LyricLine[];      // líneas sincronizadas con la música
+  transpose?: number;          // semitonos aplicados (ajuste post-generación)
+  leadId?: string;             // instrumento líder forzado (ajuste post-generación)
 }
 
 export interface PromptAnalysis {
@@ -109,6 +120,9 @@ export interface Track {
   mix: Record<string, ChannelState>;
   space?: number;
   bright?: number;
+  lyrics?: string;      // letra guardada con la obra
+  transpose?: number;   // ajuste de tonalidad persistido
+  leadId?: string;      // instrumento líder persistido
 }
 
 /* parámetros ajustables del estilo antes de generar */

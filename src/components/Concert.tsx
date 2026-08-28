@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Track } from "../lib/core";
+import type { Track, LyricLine } from "../lib/core";
 import { GENRE_MAP, genreName } from "../lib/genres";
 import { engine, type EngineSnapshot } from "../lib/engine";
 import { useSonic, useT, recomposeTrack } from "../lib/store";
@@ -23,6 +23,7 @@ export function ConcertSection() {
 
   const [snap, setSnap] = useState<EngineSnapshot>(() => engine.snapshot());
   const [bravo, setBravo] = useState(false);
+  const [karaoke, setKaraoke] = useState<LyricLine[] | null>(null);
   const wasTrackPlaying = useRef(false);
 
   useEffect(() => engine.subscribe(setSnap), []);
@@ -52,6 +53,7 @@ export function ConcertSection() {
     const comp = recomposeTrack(tr, orch, lang);
     engine.play(comp, tr.mix, tr.id, "track");
     setConcertTrack(tr.id);
+    setKaraoke(comp.lyricMap && comp.lyricMap.length ? comp.lyricMap : null);
   };
 
   const toggle = () => {
@@ -144,6 +146,23 @@ export function ConcertSection() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* letra sincronizada sobre el escenario */}
+              {karaoke && playing && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[min(92%,620px)] pointer-events-none">
+                  <div className="rounded-xl bg-black/60 backdrop-blur-md border border-white/10 px-5 py-3 text-center">
+                    {(() => {
+                      const active = karaoke.find((l) => pos >= l.startBeat && pos < l.endBeat);
+                      return (
+                        <p key={active?.line ?? "idle"} className="font-display font-semibold text-lg md:text-xl text-tube-300 leading-snug"
+                          style={{ textShadow: "0 0 18px rgba(255,176,58,0.5)" }}>
+                          {active?.line ?? "· · ·"}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-4 md:p-5 border-t border-ink-700 flex items-center gap-4 flex-wrap">

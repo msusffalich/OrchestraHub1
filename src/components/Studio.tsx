@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { ChannelState, GenParams, Orchestra, PromptAnalysis, Track, Lang } from "../lib/core";
 import { GENRE_MAP, genreName, fusedGenres, fusedBpmRange } from "../lib/genres";
 import { INSTRUMENT_MAP, instrumentName } from "../lib/instruments";
-import { analyzePrompt, compose, defaultParams, MOOD_LABELS } from "../lib/composer";
+import { analyzePrompt, compose, defaultParams, MOOD_LABELS, transposeComposition, parseLyrics } from "../lib/composer";
 import { engine, type EngineSnapshot } from "../lib/engine";
 import { hashString, uid } from "../lib/core";
 import { useSonic, useT } from "../lib/store";
@@ -77,10 +77,49 @@ export function StudioSection() {
 
   /* ---------- generador prompt-a-música ---------- */
   const [prompt, setPrompt] = useState("");
+  const [lyrics, setLyrics] = useState("");         // letra opcional (música + letra)
+  const [showLyrics, setShowLyrics] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
   const [analysis, setAnalysis] = useState<PromptAnalysis | null>(null);
   const variation = useRef(0);
+
+  /* ---------- ajustes post-generación ---------- */
+  const [transpose, setTranspose] = useState(0);           // semitonos
+  const [leadOverride, setLeadOverride] = useState("auto"); // instrumento líder
+
+  /* compone la obra cruzando prompt + letra + parámetros + ajustes */
+  const makeComp = (p: string, seed: number) => {
+    if (!orch) return null;
+    const a = analyzePrompt(p, orch);
+    setAnalysis(a);
+    if (leadOverride !== "auto") a.leaderId = leadOverride;
+    let comp = compose(a, orch, seed, lang, params ?? undefined, lyrics.trim() || undefined);
+    comp = transposeComposition(comp, transpose);
+    comp = { ...comp, leadId: leadOverride !== "auto" ? leadOverride : undefined };
+    return comp;
+  };
+
+  /* reconstrucción inmediata (ajustes en vivo, sin animación) */
+  const rebuildPiece = (opts: { newSeed?: boolean; nextTranspose?: number; nextLead?: string } = {}) => {
+    if (!orch) return;
+    engine.init();
+    const p = prompt.trim() || useSonic.getState().sessionPrompt || t("sug.1");
+    if (opts.newSeed) variation.current += 1;
+    if (opts.nextTranspose !== undefined) setTranspose(opts.nextTranspose);
+    if (opts.nextLead !== undefined) setLeadOverride(opts.nextLead);
+    const tr = opts.nextTranspose ?? transpose;
+    const lead = opts.nextLead ?? leadOverride;
+    const a = analyzePrompt(p, orch);
+    setAnalysis(a);
+    if (lead !== "auto") a.leaderId = lead;
+    const seed = (hashString(p + orch.id) + variation.current * 7919) >>> 0;
+    let comp = compose(a, orch, seed, lang, params ?? undefined, lyrics.trim() || undefined);
+    comp = transposeComposition(comp, tr);
+    comp = { ...comp, leadId: lead !== "auto" ? lead : undefined };
+    setSession(comp, p);
+    engine.play(comp, Object.keys(mix).length ? mix : orch.channels, "studio-session", "session");
+  };
 
   const generate = async (forcePrompt?: string) => {
     if (!orch || generating) return;
@@ -99,12 +138,10 @@ export function StudioSection() {
         await delay(55 + Math.random() * 60);
       }
       if (i === 1) {
-        const a = analyzePrompt(p, orch);
-        setAnalysis(a);
+        /* el motor cruza el prompt + la letra con los parámetros del estilo */
         const seed = (hashString(p + orch.id) + variation.current * 7919) >>> 0;
-        /* el motor cruza el prompt con los parámetros ajustados del estilo */
-        const comp = compose(a, orch, seed, lang, params ?? undefined);
-        setSession(comp, p);
+        const comp = makeComp(p, seed);
+        if (comp) setSession(comp, p);
       }
     }
     setProgress(1);
@@ -116,7 +153,7 @@ export function StudioSection() {
     if (comp) engine.play(comp, liveMix, "studio-session", "session");
   };
 
-  const regenerate = () => { variation.current += 1; void generate(); };
+  const regenerate = () => rebuildPiece({ newSeed: true });
 
   /* ---------- transporte ---------- */
   const play = () => {
@@ -155,6 +192,9 @@ export function StudioSection() {
       mix: Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, { ...v, solo: false }])),
       space: sessionComp.space,
       bright: sessionComp.bright,
+      lyrics: sessionComp.lyrics,
+      transpose: sessionComp.transpose,
+      leadId: sessionComp.leadId,
     };
     addTrack(track);
     toast(t("stu.savedToast"));
@@ -229,6 +269,26 @@ export function StudioSection() {
                 </button>
               ))}
             </div>
+
+            {/* letra opcional → la canción se genera completa (música + letra) */}
+            <button
+              onClick={() => setShowLyrics((s) => !s)}
+              className="mt-3 flex items-center gap-2 text-[12px] font-semibold text-ink-300 hover:text-led-300 transition-colors"
+            >
+              <Icon name="mic" size={14} />
+              {t("stu.lyricsToggle")}
+              <span className={`text-ink-500 transition-transform ${showLyrics ? "rotate-90" : ""}`}><Icon name="arrow" size={11} /></span>
+              {lyrics.trim() && <Chip color="#ff9ecb">{parseLyrics(lyrics).length} {t("stu.lyricLines")}</Chip>}
+            </button>
+            {showLyrics && (
+              <textarea
+                value={lyrics}
+                onChange={(e) => setLyrics(e.target.value)}
+                placeholder={t("stu.lyricsPh")}
+                rows={5}
+                className="mt-2 w-full bg-ink-900 border border-ink-600 rounded-lg px-3.5 py-3 text-[13.5px] leading-relaxed text-ink-100 placeholder-ink-500 resize-y focus:border-clip-400/60 transition-colors focus-ring"
+              />
+            )}
 
             <StyleParamsPanel orch={orch} params={params} setParams={setParams} lang={lang} />
 
@@ -330,6 +390,54 @@ export function StudioSection() {
               </button>
             )}
           </motion.section>
+
+          {/* ajustes de la obra (post-generación) */}
+          {sessionComp && (
+            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }} className="panel p-5">
+              <h2 className="font-display font-bold text-[16px] mb-1 flex items-center gap-2">
+                <span className="text-clip-400"><Icon name="knob" size={18} /></span>
+                {t("stu.adjustTitle")}
+              </h2>
+              <p className="text-ink-400 text-[11.5px] mb-4 leading-relaxed">{t("stu.adjustHint")}</p>
+
+              {/* tonalidad */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="silk-label-xs">{t("stu.transpose")}</span>
+                  <span className="font-mono text-[12px] text-tube-400 tabular">
+                    {transpose > 0 ? `+${transpose}` : transpose} {t("stu.semitones")}
+                  </span>
+                </div>
+                <HSlider value={transpose} min={-6} max={6} step={1}
+                  onChange={(v) => rebuildPiece({ nextTranspose: v })} />
+              </div>
+
+              {/* instrumento líder */}
+              <div className="mb-4">
+                <div className="silk-label-xs mb-1.5">{t("stu.leadInstrument")}</div>
+                <select
+                  value={leadOverride}
+                  onChange={(e) => rebuildPiece({ nextLead: e.target.value })}
+                  className="w-full bg-ink-900 border border-ink-600 rounded-lg px-3 py-2 text-[13px] text-ink-100 cursor-pointer hover:border-ink-500 transition-colors focus-ring"
+                >
+                  <option value="auto">{t("stu.leadAuto")}</option>
+                  {orch.instrumentIds.filter((id) => INSTRUMENT_MAP[id]?.roles.includes("melody")).map((id) => (
+                    <option key={id} value={id}>{instrumentName(id, lang)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button onClick={() => rebuildPiece({ newSeed: true })} className="btn-ghost rounded-lg px-3.5 py-2 text-[12.5px] font-semibold flex items-center gap-1.5 flex-1 justify-center">
+                  <Icon name="dice" size={15} /> {t("stu.regenerate")}
+                </button>
+                <button onClick={() => { setTranspose(0); setLeadOverride("auto"); rebuildPiece({ nextTranspose: 0, nextLead: "auto" }); }}
+                  className="btn-ghost rounded-lg px-3.5 py-2 text-[12.5px] font-semibold flex items-center gap-1.5">
+                  <Icon name="x" size={13} /> {t("common.reset")}
+                </button>
+              </div>
+            </motion.section>
+          )}
         </div>
 
         {/* ================= COLUMNA DERECHA ================= */}
@@ -346,6 +454,34 @@ export function StudioSection() {
                 onToggleMute={(id) => updateMix(id, { mute: !(mix[id]?.mute) })} />
             </div>
           </motion.section>
+
+          {/* karaoke: letra sincronizada con la música */}
+          {sessionComp?.lyricMap && sessionComp.lyricMap.length > 0 && (
+            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="panel p-4">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h2 className="font-display font-bold text-[16px] flex items-center gap-2">
+                  <span className="text-clip-400"><Icon name="mic" size={17} /></span>
+                  {t("stu.karaoke")}
+                </h2>
+                <Led on={snap.status === "playing" && isSessionSource} color="red" pulse />
+              </div>
+              <div className="panel-inset rounded-lg p-3.5 max-h-[180px] overflow-y-auto">
+                {sessionComp.lyricMap.map((l, i) => {
+                  const active = isSessionSource && pos >= l.startBeat && pos < l.endBeat;
+                  const past = isSessionSource && pos >= l.endBeat;
+                  return (
+                    <p key={i}
+                      className={`text-[14px] leading-relaxed transition-all duration-200 ${
+                        active ? "text-tube-400 font-semibold scale-[1.02]" : past ? "text-ink-500" : "text-ink-200"
+                      }`}
+                      style={active ? { textShadow: "0 0 14px rgba(255,176,58,0.4)" } : undefined}>
+                      {l.line}
+                    </p>
+                  );
+                })}
+              </div>
+            </motion.section>
+          )}
 
           <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="panel p-4">
             <div className="flex items-center justify-between mb-3 px-1">
