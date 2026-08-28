@@ -108,7 +108,7 @@ export function LibrarySection() {
           track={scoreFor.track}
           comp={scoreFor.comp}
           onClose={() => setScoreFor(null)}
-          onDone={() => { setScoreFor(null); toast(t("score.done")); }}
+          onDone={() => { /* el modal sigue abierto mostrando la vista previa */ }}
         />
       )}
     </div>

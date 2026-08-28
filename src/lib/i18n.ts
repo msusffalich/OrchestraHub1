@@ -26,6 +26,7 @@ const DICT: Record<string, { es: string; en: string }> = {
   "common.delete": { es: "Eliminar", en: "Delete" },
   "common.reset": { es: "Restablecer", en: "Reset" },
   "common.download": { es: "Descargar", en: "Download" },
+  "common.close": { es: "Cerrar", en: "Close" },
   "common.edit": { es: "Editar", en: "Edit" },
   "common.duplicate": { es: "Duplicar", en: "Duplicate" },
 
@@ -151,6 +152,8 @@ const DICT: Record<string, { es: string; en: string }> = {
   "score.building": { es: "Generando…", en: "Building…" },
   "score.download": { es: "Generar y descargar PDF", en: "Generate & download PDF" },
   "score.done": { es: "Partitura PDF descargada", en: "PDF score downloaded" },
+  "score.error": { es: "No se pudo generar la partitura. Inténtalo de nuevo.", en: "The score could not be generated. Please try again." },
+  "score.previewNote": { es: "Si la descarga no arrancó automáticamente (pasa en vistas previas), usa «Descargar PDF» o guarda la vista previa con Ctrl/Cmd + S.", en: "If the download didn't start automatically (common in embedded previews), use “Download PDF” or save the preview with Ctrl/Cmd + S." },
 
   /* ---------- concierto ---------- */
   "con.title": { es: "Sala de Conciertos", en: "Concert Hall" },
